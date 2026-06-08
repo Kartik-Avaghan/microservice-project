@@ -1,104 +1,92 @@
 pipeline {
-agent any
+    agent any
 
-```
-environment {
-    DOCKER_USERNAME = "kartikavaghan"
-    IMAGE_TAG = "${BUILD_NUMBER}"
-}
-
-tools {
-    maven 'Maven'
-    jdk 'JDK17'
-}
-
-stages {
-
-    stage('Checkout Code') {
-        steps {
-            git branch: 'main',
-                url: 'https://github.com/your-username/your-repo.git'
-        }
+    environment {
+        DOCKER_USERNAME = "kartikavaghan"
     }
 
-    stage('Build Services') {
-        steps {
-            bat 'mvn clean package -DskipTests'
-        }
+    tools {
+        maven 'Maven'
+        jdk 'JDK17'
     }
 
-    stage('Build Docker Images') {
-        steps {
-            bat '''
-            docker build -t %DOCKER_USERNAME%/eureka-server:%IMAGE_TAG% ./eureka-server
+    stages {
 
-            docker build -t %DOCKER_USERNAME%/api-gateway:%IMAGE_TAG% ./api-gateway
-
-            docker build -t %DOCKER_USERNAME%/pg-service:%IMAGE_TAG% ./pg-service
-
-            docker build -t %DOCKER_USERNAME%/payment-service:%IMAGE_TAG% ./payment-service
-            '''
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
         }
-    }
 
-    stage('Docker Login') {
-        steps {
-            withCredentials([
-                usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )
-            ]) {
+        stage('Build Eureka Server') {
+            steps {
+                dir('EurekaServer') {
+                    bat 'mvn clean package -DskipTests'
+                }
+            }
+        }
 
-                bat '''
-                echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                '''
+        stage('Build API Gateway') {
+            steps {
+                dir('ApiGateway') {
+                    bat 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Build PG Service') {
+            steps {
+                dir('pg_backend') {
+                    bat 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Build Payment Service') {
+            steps {
+                dir('PaymentGateway') {
+                    bat 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                bat 'docker compose build'
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
+                }
+            }
+        }
+
+        stage('Push Images') {
+            steps {
+                bat 'docker push kartikavaghan/eureka-server:latest'
+                bat 'docker push kartikavaghan/api-gateway:latest'
+                bat 'docker push kartikavaghan/pg-service:latest'
+                bat 'docker push kartikavaghan/payment-service:latest'
             }
         }
     }
 
-    stage('Push Images') {
-        steps {
-            bat '''
-            docker push %DOCKER_USERNAME%/eureka-server:%IMAGE_TAG%
+    post {
+        success {
+            echo 'Build and Push Successful'
+        }
 
-            docker push %DOCKER_USERNAME%/api-gateway:%IMAGE_TAG%
-
-            docker push %DOCKER_USERNAME%/pg-service:%IMAGE_TAG%
-
-            docker push %DOCKER_USERNAME%/payment-service:%IMAGE_TAG%
-            '''
+        failure {
+            echo 'Pipeline Failed'
         }
     }
-
-    stage('Tag Latest') {
-        steps {
-            bat '''
-            docker tag %DOCKER_USERNAME%/eureka-server:%IMAGE_TAG% %DOCKER_USERNAME%/eureka-server:latest
-            docker tag %DOCKER_USERNAME%/api-gateway:%IMAGE_TAG% %DOCKER_USERNAME%/api-gateway:latest
-            docker tag %DOCKER_USERNAME%/pg-service:%IMAGE_TAG% %DOCKER_USERNAME%/pg-service:latest
-            docker tag %DOCKER_USERNAME%/payment-service:%IMAGE_TAG% %DOCKER_USERNAME%/payment-service:latest
-
-            docker push %DOCKER_USERNAME%/eureka-server:latest
-            docker push %DOCKER_USERNAME%/api-gateway:latest
-            docker push %DOCKER_USERNAME%/pg-service:latest
-            docker push %DOCKER_USERNAME%/payment-service:latest
-            '''
-        }
-    }
-
-}
-
-post {
-    success {
-        echo 'Build and Push Successful'
-    }
-
-    failure {
-        echo 'Pipeline Failed'
-    }
-}
-```
-
 }
