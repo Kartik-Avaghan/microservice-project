@@ -1,0 +1,100 @@
+services:
+
+  #  EUREKA SERVER 
+  eureka-server:
+    image: kartikavaghan/eureka-server:latest
+    build:
+      context: ./EurekaServer
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - microservices-net
+
+  #  API GATEWAY 
+  api-gateway:
+    image: kartikavaghan/api-gateway:latest
+    build:
+      context: ./ApiGateway
+    container_name: api-gateway
+    restart: always
+    ports:
+      - "8765:8765"
+    depends_on:
+      - eureka-server
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+    networks:
+      - microservices-net
+
+  #  PG SERVICE 
+  pg-service:
+    image: kartikavaghan/pg-service:latest
+    build:
+      context: ./pg_backend
+    container_name: pg-service
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/pgmanagement
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+    networks:
+      - microservices-net
+
+  #  PAYMENT SERVICE 
+  payment-service:
+    image: kartikavaghan/payment-service:latest
+    build:
+      context: ./PaymentGateway
+    container_name: payment-service
+    restart: always
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/paymentdb
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+    networks:
+      - microservices-net
+
+  #  MYSQL DATABASE 
+  mysql:
+    image: mysql:8
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices-net
+
+#  VOLUMES 
+volumes:
+  mysql-data:
+
+#  NETWORK 
+networks:
+  microservices-net:
