@@ -78,6 +78,13 @@ pipeline {
                 bat 'docker push kartikavaghan/payment-service:latest'
             }
         }
+
+        stage('Deploy') {
+    steps {
+        bat 'docker compose down'
+        bat 'docker compose up -d'
+    }
+}
     }
 
     post {
